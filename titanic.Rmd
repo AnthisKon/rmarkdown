@@ -1,0 +1,543 @@
+---
+title: "Titanic dataset"
+author: "Konstantinos"
+date: '`r Sys.Date()`'
+output: 
+ prettydoc::html_pretty:
+   df_print: paged
+   fig_caption: yes
+   header-includes: \usepackage{float}
+   highlight: github
+   number_sections: yes
+   theme: architect
+   toc: yes
+   toc_depth: 3
+   css: custom.css
+---
+
+
+```{r setup, include=FALSE}
+# default", "tango", "pygments", "kate", "monochrome", "espresso", "zenburn", "haddock", "textmate"
+
+knitr::opts_chunk$set(tidy = FALSE)
+options(htmltools.dir.version = FALSE)
+```
+# Intro
+
+```{r packages, message=FALSE, warning=FALSE}
+require(ggplot2)
+require(RColorBrewer)
+require(ggthemes)
+require(dplyr)
+library(xtable)
+library(Amelia)
+library(reshape2)
+require(andrews)
+require(tidyr)
+require(GGally) 
+require(scales)
+require(ggExtra)
+
+# require(grid) for multiplot function
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+# Read dataset - Basic exploration
+```{r readdata,tidy=TRUE}
+data=read.csv("train.csv")
+dim(data) ## rows and variables of the dataset
+str(data) ## structure of the data
+data
+```
+
+
+```{r, message=FALSE, warning=FALSE,results='asis'}
+options(xtable.comment = FALSE)
+
+xtable(summary(data))
+```
+
+
+
+
+# Explore variables, visualize missing values and create new features
+- First, lets turn empty values into NA's 
+```{r missing values}
+data[data==""]= NA
+```
+
+
+- Use `Amelia` package (which is for imputation) to visualize the missing values
+```{r amelia, message=FALSE, warning=FALSE,fig.align='center',fig.width=5,fig.height=4}
+missmap(data,y.cex=0.5,main="Na's in the dataset")
+```
+
+- Make this plot prettier with `ggplot2` and help from [neato package's function ](https://github.com/njtierney/neato/blob/master/R/ggplot_missing.R)
+```{r missing values pretty, message=FALSE, warning=FALSE,fig.align='center',fig.width=6, fig.height=5}
+
+
+ggplot_missing <- function(x){
+
+  x %>% 
+    is.na %>%
+    melt %>%
+    ggplot(data = .,
+           aes(x = Var2,
+               y = Var1)) +
+    geom_raster(aes(fill = value)) +
+    scale_fill_grey(name = "",
+                    labels = c("Present","Missing")) +
+    theme_tufte() + 
+    theme(axis.text.x  = element_text(angle=30, vjust=0.5)) + 
+    labs(x = "Variables in Dataset",
+         y = "Rows / observations")
+  }
+ggplot_missing(data)
+```
+
+
+## Explore and extract info from Name variable
+```{r}
+head(data$Name)
+# sort(data$Name) # I sorted alphabetically so I could understand better. You can se
+# Now lets make some new variables
+data=separate(data,col=Name,into=c('Surname',"temp"),sep =c(', '),remove=F)
+data=separate(data,col=temp,into="Title",sep ='. ',remove=TRUE)
+
+# After a while, I compared the results with others and i had one mistake. I did not take into account if the title is more than one word. So, I lost 'the Countess' and got just 'th'. So watch out!
+#data$Title <- gsub('(.*, )|(\\..*)', '', data$Name)
+#data$Surame=sapply(as.character(data$Name),function(x) unlist(strsplit(x, split = '[,.]'))[1])
+summary(factor(data$Title))
+data[,c(5,6)]
+other_title <- c('Dona', 'Lady', 'th','Capt', 'Col', 'Don', 
+                'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer')
+
+data$Title[data$Title == 'Mlle']        <- 'Miss' 
+data$Title[data$Title == 'Ms']          <- 'Miss'
+data$Title[data$Title == 'Mme']         <- 'Mrs' 
+data$Title[data$Title %in% other_title]  <- 'Other Title'
+table(data$Sex,data$Title)
+
+```
+
+- Let's see the Surnames. There are printed the names that appear more than one time in the dataset. I ll use them later (this report is in progress). The table also shows how many names appeared 1 time, how many two times etc.
+```{r}
+n=data.frame(table(data$Surname))
+reg_names=data[rownames(n[n$Freq > 1,]),]
+SurnameNum=data.frame(table(sort(n$Freq)))
+names(SurnameNum)=c("# of times the Surname appears","# of names")
+options(xtable.comment = FALSE)
+
+xtable(SurnameNum)
+sort(reg_names[,5]) # these are the names that appear more than one time in the dataset
+```
+
+
+## Imput the Na's of Age variable
+
+
+- I run a regression model on Age. (Note that the variable Embarked has two Na's which lm() omits)
+- Then predict the Na's, see if the imputation left the Age variable distribution without significan change
+```{r}
+set.seed(123)
+m=lm(Age~.,data=data[,-c(1,4,5,11,9,10,13)]) # regression 
+t=predict(m,data[is.na(data$Age),-c(1,4,5,11,9,10,13,8)]) # predict na's from regression model
+# Remove any negative value and replace it with 0.5 
+for(i in 1:length(t)){
+  if(t[i]<0) {
+      t[i]= 0.5
+  }
+}
+
+# Lets test now
+test=data
+test[names(t),8]=t
+par(mfrow=c(1,2))
+hist(data$Age,freq=F,ylim = c(0,0.04),main="Histogram of Age without Na's")
+hist(test$Age,freq=F,ylim = c(0,0.04),main="Histogram of Age after imputation")
+# Since it seems ok
+data[names(t),8]=t
+dim(data)
+summary(is.na(data$Age)) ## DONE!
+```
+- At the end, the Age variable has no Na's. That's nice, though a better job could definitely be done.
+
+
+
+## Fix the two Na's in Embarked
+At this point I got a little bored so I ll just remove those two observations
+```{r}
+data=data[!is.na(data$Embarked),]
+dim(data)
+```
+# Some nice Visualization 
+
+## Densities
+- Fare: Found something interesting. There are 15 observations with zero fare. That doesnt seems right so let's examine further:
+```{r density,fig.align='center'}
+zeroFare=data[data$Fare==0,]
+#ggplot(data,
+ #      aes(x=log10(Fare)))+
+ # geom_density(fill="blue",
+ #              alpha=0.3)+
+ # theme_excel()
+options(xtable.comment = FALSE)
+xtable(summary(zeroFare))
+
+```
+- From summary, we can see that they all are males adults bettween 19 and 49, all embarked from Southampton alone(without any family member) and all have ticket numbers. Let's see the rest characteristics.
+
+```{r,fig.align='center',fig.height= 3}
+g1= ggplot(zeroFare,
+        aes(x=factor(Survived),fill=factor(Survived)))+
+    geom_bar()+
+    scale_x_discrete(breaks=c(0,1),
+                     labels=c("Not Survived","Survived"),
+                     name=" ")+
+    scale_fill_brewer(palette="Set1",breaks=c(0,1),
+                     labels=c("Not Survived","Survived"),
+                     name=" ")+
+    theme_tufte()+
+    theme(legend.position = c(0.9,0.9),
+          plot.title = element_text(hjust=0.5))+
+    ggtitle("Zero Fare vs Survival")
+  
+
+g2= ggplot(zeroFare,
+        aes(x=factor(Pclass),fill=factor(Pclass)))+
+    geom_bar()+
+    scale_fill_tableau(name="Class",
+                       breaks=c(1,2,3),
+                       labels=c("1st","2nd","3rd"))+
+    scale_x_discrete(name="",
+                     breaks=c(1,2,3),
+                     labels=c("1st","2nd","3rd"))+
+    theme_tufte()+
+    theme(legend.position = c(0.9,0.9),
+          plot.title = element_text(hjust=0.5))+
+    ggtitle("Zero Fare vs Pclass")
+
+multiplot(g1,g2,cols = 2)
+```
+- Only one of them Survived. I consider these zero values as missing and I ll handle them as Na's.
+
+
+
+## Survived 
+```{r}
+ggplot(data,
+       aes(x=factor(Survived)))+
+  geom_bar(
+       aes(y=(..count../sum(..count..)),
+           fill=factor(Survived)))+
+  scale_x_discrete(breaks=c(0,1),
+                   labels=c("Not Survived","Survived"),name=" ")+
+  scale_fill_colorblind(breaks=c(0,1),
+                   labels=c("Not Survived","Survived"),name="Survived")+
+  scale_y_continuous(breaks = c(0,0.2,0.4,0.6),
+                     labels=c("0%","20%","40%","60%"))+
+  theme_classic()+
+  theme(plot.title = element_text(hjust=0.5),
+        legend.position = c(0.9,0.9))+
+  ggtitle('Survived or not? Percentage of the train dataset')+
+  ylab(" ")
+  
+
+```
+
+
+## Sex 
+```{r Gender barplot,fig.width=6, fig.height=5,fig.align='center'}
+ggplot(data,
+       aes(Sex)
+       )+
+  geom_bar(
+    aes(y=(..count..)/sum(..count..)),  # returns the percentage instead of the count, for just count = ..count..
+    fill=c('red','blue')  # choose your colours
+    )+
+  ylab('')+
+  ggtitle("Gender of Titanic's passengers")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5)) # centers the main title
+```
+
+- This plot is evidence that the gender of the passenger is important to predict the survival. So, it is a strong indication that the Sex variable should be in the model.
+```{r Sex,fig.width=6, fig.height=5,fig.align='center'}
+
+ggplot(data,
+       aes(y=Survived,
+           x=Sex,
+           fill=as.factor(Sex)
+           )
+       )+
+  geom_bar(stat = 'identity'
+           )+
+  scale_fill_brewer(palette='Dark2', # RcolorBrewer package
+                    name='Sex'  # title for the legend
+                    )+
+  theme_gdocs(base_size = 12 # font size for the gdocs theme from ggthemes package
+              )+
+  theme(legend.position = c(0.9, .85), # choose the exact position for the legend in your graph
+        plot.title = element_text(hjust = 0.5) # centers the main title of the plot
+        )+
+  ggtitle('How many male and female people survived')
+
+```
+
+
+##  Age
+
+
+
+```{r age,fig.align='center',tidy=F,,fig.width=6, fig.height=5}
+ggplot(na.omit(data[,c(2,8)]),
+       aes(x=factor(Survived),
+           y=Age,
+           fill=factor(Survived))
+       )+
+  geom_boxplot(outlier.colour = "red",  # how to show the outliers in the plot
+               outlier.shape = 3, #outlier shape
+               outlier.size = 2  # outlier size
+               )+ 
+  stat_summary(fun.y = mean,   # visualize the mean in the boxplot to get an idea about the data distribution
+               geom = "point", # type of the mean icon
+               shape = 6,       # shape of the mean icon
+               size = 2       # size
+               )+
+  theme_wsj(base_size = 10   # size of the font in wall street journal theme
+            )+
+  ggtitle("Boxplot")+
+  xlab('Survived')+
+  theme(legend.position = 'bottom', # theme() options overrides the wsj theme options
+        plot.title = element_text(hjust = 0.5) # centers the title 
+        )+
+  scale_fill_brewer(palette = 'Set1', 
+                    name="Survived",
+                    breaks=c(0,1),
+                    labels=c("No", "Yes")
+                    )+
+  scale_x_discrete(breaks=c(0,1),
+                   labels=c("No", "Yes")
+                   )
+
+```
+
+
+
+
+
+## Economic class, Fare and Embarked
+```{r economic class Pclass, fig.align='center',fig.width=6, fig.height=5}
+ggplot(data,
+       aes(x=Pclass,
+           y=Survived,
+           fill=factor(Pclass))
+       )+
+  geom_bar(stat="identity")+
+  theme_solarized()+ # nice theme from ggthemes
+  scale_fill_brewer(palette="Set2",
+                    name="Ticket Class",
+                    breaks=c(1,2,3),
+                    labels=c("1st","2nd","3rd")
+                    )+
+  theme(legend.position = 'bottom',
+         axis.text.x = element_blank(), # No text on x axis 
+        plot.title = element_text(hjust = 0.5)
+        )+
+  xlab("")+
+  ggtitle('How many survived from each ticket class')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r fare,fig.width=6, fig.height=5,fig.align='center',fig.cap='It seems that the survivers had paid significant higher fare by mean, even though we have many extreme values and outliers. It should be pointed out that the three passengers with the much higher fare all survived'}
+g1=ggplot(data,
+          aes(x=factor(Survived),y=Fare)
+          )+
+  geom_boxplot()+
+  theme_minimal()+
+  theme(axis.title.x = element_blank()
+        )
+## There are extreme values that destroy the plot..Let's remove:
+g2=ggplot(data,
+          aes(x=factor(Survived),y=Fare)
+          )+
+  geom_boxplot()+
+  scale_y_continuous(limits = c(0, 300)
+                     )+
+  theme_excel()+
+  theme(axis.title.x = element_blank()
+        )+
+  ylab('')
+## The plot shows 1 extreme value over 300 but three values are excluded.
+tail(sort(data$Fare))
+## and thats correct because three tickets had the biggest and the same fare.
+g3=ggplot(data,
+          aes(x=factor(Survived),y=Fare)
+          )+
+  geom_boxplot()+
+  scale_y_continuous(limits = c(0, 120))+
+  theme_dark()+
+  theme(axis.title.x = element_blank()
+        )+
+  ylab('')
+multiplot(g1,g2,g3,cols=3)
+```
+```{r fare and Pclass,fig.width=6, fig.height=5,fig.align='center',fig.cap="This plot gives a slightly different view. In the 2nd and 3rd class there seems to be no significant difference. In the 1st class thought it seems that the people who paid higher fare survived by mean."}
+ggplot(data,
+       aes(x=factor(Survived),
+           y=Fare,
+           fill=factor(Survived)))+
+  geom_boxplot()+
+  facet_grid(~Pclass,
+             labeller=labeller(Pclass = c('1'="1st Class",'2'="2nd Class",'3'="3rd Class")) # change the facet's labels
+             )+
+  theme_solarized_2()+
+  scale_y_continuous(limits = c(0,160)   # manipulate the y-axis limits to omit some extreme values
+                     )+
+  xlab("Survived")+
+  scale_fill_brewer(palette = 'Set1',guide=FALSE   # guide=F to remove legend
+                    )+
+  scale_x_discrete(breaks=c(0,1),labels=c("No","Yes")) # change the names of x axis. You have to define the breaks and then give labels
+```
+```{r Embarked,fig.width=6, fig.height=5,fig.align='center'}
+ggplot(data[!is.na(data$Embarked),],aes(x=Embarked,
+                y=(..count..)/sum(..count..),fill=Embarked))+
+  geom_bar()+
+  facet_grid(~Survived,
+             labeller = labeller(Survived=c('0'="Not Survived",'1'="Survived")))+
+  scale_fill_brewer(palette = "Spectral",guide=F)+
+  theme_dark()+ylab('')+xlab("")+
+  scale_x_discrete(breaks=c("C","Q","S"),
+                   labels=c("Cherbourg","Queenstown","Southampton"))
+```
+```{r Embarked2,fig.width=6, fig.height=5,fig.align='center'}
+ggplot(data[!is.na(data$Embarked),],aes(x=Embarked,
+                y=(..count..)/sum(..count..),fill=Embarked))+
+  geom_bar()+
+  scale_fill_brewer(palette = "Spectral")+
+  theme_dark()+ylab('')+xlab("")+
+  scale_x_discrete(breaks=c("C","Q","S"),
+                   labels=c("Cherbourg","Queenstown","Southampton"))
+
+```
+```{r adfaf,fig.width=6, fig.height=5,fig.align='center'}
+ggplot(data[!is.na(data$Embarked),],aes(x=factor(Embarked),
+                y=Fare,fill=Embarked))+
+  theme_dark()+
+  geom_boxplot()+scale_y_continuous(limits = c(0,175))
+```
+
+
+
+## Andrews plot 
+```{r Andrews plot,fig.align='center',fig.cap='Andrews plot is useful for multidimensional datasets. We can see if the groups of the Survived variable are seperatable with the (numerical) variables of this dataset.'}
+test<-data[,-c(1,4,5,9,10,11)]  # I exclude all the none numerical variables, not the Survived though
+test<-na.omit(test) # no missing values for the andrews plot..
+andrews(test, # data
+        clr=1, # the variable I want to use to color the strings 
+        type =1, ymax=3,step=80,main="Andrews plot, best to use with multi-dimensional datasets")
+```
+
+## Calculate the Family Size
+```{r,fig.align='center',fig.width=5,fig.height=4}
+
+data$FamSize=data$SibSp+data$Parch+1
+
+ggplot(data,
+       aes(x=factor(FamSize),
+           fill=factor(Survived))
+       )+
+  geom_bar(stat='count',position='dodge')+
+  scale_fill_brewer(palette="Pastel1",name="Survival",
+                    breaks=c(0,1),labels=c("No","Yes"))+
+  theme_dark()+xlab("Family Size")+
+  ggtitle("Survival by Family Size")+
+  scale_x_discrete(breaks=c(1:11),labels=c(1:11))+
+  theme( plot.title = element_text(hjust = 0.5),legend.position = c(0.9,0.8),legend.background = element_rect(fill = 'darkgrey'))
+
+```
+
+
+
+# Models
+
+## Train and test sets.
+We could much more to learn about titanic and its passengers but lets built a simple model. 
+
+- I create 1000 samples from the data. Every time I sample with replacement 889 observations from the dataset to create a training set. The observations that did not get selected are forming the test dataset. So the every training set has 889 observations and the test set around 35% of 889.
+- I train my model 1000 times and I get the accuracy for each time. Now I now the mean accuracy and the standard deviation.
+```{r data seperation, echo=TRUE, message=FALSE, warning=FALSE}
+
+mdata=select(data,c(Survived,Pclass,Sex,Title,Age,Fare,Embarked,FamSize,SibSp,Parch)) # select variables
+mdata$Survived=factor(mdata$Survived,
+                      levels = 0:1,
+                      labels = c("no", "yes")) 
+
+test$Pclass=as.numeric(test$Pclass)
+
+
+
+accuracy=NULL 
+for(i in 1:1000){
+  te=sample(1:889,889,replace = TRUE)
+  train=mdata[te,]
+  test=mdata[-te,]
+  model=glm(Survived~.,train,family = 'binomial')
+  p=round(predict(model,test[,-1],type="response"))
+  accuracy[i]=sum(diag(table(p,test[,1])))/sum(table(p,test[,1]))
+}
+mean(accuracy)
+sd(accuracy)
+
+```
+
+
+
+
+
+
+
