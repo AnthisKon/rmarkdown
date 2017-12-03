@@ -1,0 +1,43 @@
+---
+title: "Assignment: R Markdown and Leaflet"
+subtitle: "Coursera Course: Developing Data Products"
+author: "Konstantinos"
+date: "`r paste('December',format(Sys.Date(),'%d'),',',format(Sys.Date(),'%Y'))`"
+output:
+ prettydoc::html_pretty:
+   df_print: paged
+   fig_caption: yes
+   highlight: vignette
+   number_sections: yes
+   theme: hpstr
+   toc: yes
+   toc_depth: 3
+---
+```{r setup, include=FALSE}
+# default", "tango", "pygments", "kate", "monochrome", "espresso", "zenburn", "haddock", "textmate"
+knitr::opts_chunk$set(tidy = FALSE)
+options(htmltools.dir.version = FALSE,knitr.table.format = 'markdown')
+```
+```{r include=FALSE}
+library(lubridate)
+library(leaflet)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+Sys.setlocale("LC_ALL","English")
+```
+# Dataset
+[this website](http://simplemaps.com/data/world-cities)
+
+```{r}
+mapdata = read.csv('C:\\Users\\TEST\\Desktop\\data.csv')
+head(mapdata)
+```
+
+
+# Map 
+
+```{r}
+mapdata[mapdata$pop >= 1500000,] %>% leaflet()  %>% addTiles()   %>% addCircles(lng = ~lng, lat = ~lat, weight = 1,radius = ~sqrt(pop) * 30, popup = ~city , label = ~as.character(city))
+```
+
