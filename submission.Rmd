@@ -11,7 +11,6 @@ output:
    number_sections: yes
    theme: hpstr
    toc: yes
-   toc_depth: 3
 ---
 ```{r setup, include=FALSE}
 # default", "tango", "pygments", "kate", "monochrome", "espresso", "zenburn", "haddock", "textmate"
@@ -27,17 +26,33 @@ library(kableExtra)
 Sys.setlocale("LC_ALL","English")
 ```
 # Dataset
-[this website](http://simplemaps.com/data/world-cities)
+I googled *'map datasets for R'* and [this website](http://simplemaps.com/data/world-cities) came up. Not a lot of data, but ok for this task. 
+No time to do something cooler :(
 
+- Bellow you can see the first 6 rows of the dataset just to get an idea what the dataset is about.
 ```{r}
-mapdata = read.csv('C:\\Users\\TEST\\Desktop\\data.csv')
+mapdata = read.csv('data.csv')
 head(mapdata)
 ```
 
 
 # Map 
+- The map has a circle for each city with population over 500,000. The size of the circle is proportional to the size of the population. 
+- The pop ups contains the population of the city and the name of the city
+- I also included clusters just to see how many cities have population over 500,000 for each region/polygon so zoom in/out to check it out
 
-```{r}
-mapdata[mapdata$pop >= 1500000,] %>% leaflet()  %>% addTiles()   %>% addCircles(lng = ~lng, lat = ~lat, weight = 1,radius = ~sqrt(pop) * 30, popup = ~city , label = ~as.character(city))
+```{r warning=FALSE}
+mapdata[mapdata$pop >= 500000,]%>%
+  leaflet()  %>% 
+  addProviderTiles(providers$Esri.NatGeoWorldMap) %>%  
+  addCircles(lng = ~lng, 
+             lat = ~lat, 
+             weight = 1,
+             radius = ~sqrt(pop) * 30, 
+             popup = ~city , 
+             label = ~as.character(
+                    format(pop,
+                           big.mark = ",",
+                           small.mark = "."))) %>% addMarkers(
+  clusterOptions = markerClusterOptions())
 ```
-
