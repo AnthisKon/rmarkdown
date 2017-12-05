@@ -1,0 +1,43 @@
+---
+title: "Assignment: R Markdown and Plotly"
+subtitle: "Coursera Course: Developing Data Products"
+author: "Konstantinos"
+date: "`r paste('December',format(Sys.Date(),'%d'),',',format(Sys.Date(),'%Y'))`"
+output:
+ prettydoc::html_pretty:
+   df_print: paged
+   fig_caption: yes
+   highlight: vignette
+   number_sections: yes
+   theme: hpstr
+   toc: yes
+---
+```{r setup, include=FALSE}
+# default", "tango", "pygments", "kate", "monochrome", "espresso", "zenburn", "haddock", "textmate"
+knitr::opts_chunk$set(tidy = FALSE)
+options(htmltools.dir.version = FALSE,knitr.table.format = 'markdown')
+```
+```{r include=FALSE}
+library(lubridate)
+library(plotly)
+library(dplyr)
+library(knitr)
+library(Rokemon)
+library(kableExtra)
+library(titanic)
+Sys.setlocale("LC_ALL","English")
+```
+# Dataset
+
+```{r}
+titanic_train
+```
+
+
+# Plotly
+
+
+```{r warning=FALSE}
+ plot_ly(titanic_train, x = ~ Age, y = ~Fare, color = ~as.factor(Survived)) 
+
+```
