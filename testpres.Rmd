@@ -1,7 +1,7 @@
 ---
-title: "Untitled"
+title: "Data Science Specialization_Developing Data Products"
 author: "Konstantinos"
-date: "5 December 2017"
+date: "12 December 2017"
 output: ioslides_presentation
 ---
 
@@ -12,25 +12,14 @@ library(titanic)
 ```
 
 ##  Intro - Dataset
+I just used the famous **titanic** dataset and went for the minimum criteria to pass the assigment. Just too many courses :)
 
-
-
-## Plot 1
-
-- Bullet 1
-- Bullet 2
-- Bullet 3
-
-## Plot2 
-
-```{r cars, echo = TRUE}
-summary(cars)
-```
 
 ## Slide with Plot
 
 ```{r pressure, message=FALSE, warning=FALSE}
- plot_ly(titanic_train, x = ~ Age, y = ~Fare, color = ~as.factor(Survived)) 
+
+ plot_ly(titanic_train, x = ~ Age, y = ~Fare, color = ~as.factor(Survived), type = 'scatter') 
 
 ```
 
