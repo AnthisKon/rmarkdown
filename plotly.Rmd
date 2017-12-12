@@ -22,13 +22,16 @@ library(lubridate)
 library(plotly)
 library(dplyr)
 library(knitr)
-library(Rokemon)
 library(kableExtra)
 library(titanic)
+library(scales)
+library(RColorBrewer)
 Sys.setlocale("LC_ALL","English")
 ```
-# Dataset
 
+
+# Dataset
+I just used the famous titanic dataset.
 ```{r}
 titanic_train
 ```
@@ -38,6 +41,7 @@ titanic_train
 
 
 ```{r warning=FALSE}
- plot_ly(titanic_train, x = ~ Age, y = ~Fare, color = ~as.factor(Survived)) 
+titanic_train[titanic_train$Embarked=='',12] = NA
+plot_ly(na.omit(titanic_train), x = ~ Age, y = ~Fare, color  = ~ as.factor(Embarked),mode='markers',type = 'scatter') 
 
 ```
