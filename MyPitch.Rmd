@@ -1,0 +1,38 @@
+---
+title: "Shiny Application Pitch"
+author: "Konstantinos"
+date: "25 December 2017"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Intro 
+
+- I used the Iris dataset to demonstrate a simple idea
+```{r}
+summary(iris)
+```
+## The problem
+
+- We have 4 variable that we want to use in order to classify the 5th variable Species or to predict Species (setosa, versicolor, virginica )
+- It is difficult to find out if these 4 variables help us 'seperate' the three Species. Imagine if we had even more variables.
+- **My Solution:** *Principal Components Analysis*(**PCA**). Dimensionality Reduction method. I will visualise the separation of the three species with the Principal Components.
+
+## What the app does? How is it usefull?
+- It is just a simple, very basic app. You can only choose how many Principal Components the scatter plot matrix has.
+- You can see that how many PCs you need to separate the Species. You can use the PCs in furute analysis or in a predictive model instead of the original 4 variables. 
+- As you can see bellow the first two commponents explain 95% of the variability of the dataset.
+```{r}
+pca <- prcomp(iris[,-5],
+                center = TRUE,
+                scale = TRUE)
+summary(pca)
+```
+## Where to find it?
+- https://konanthis.shinyapps.io/Visualize_Multidimensional_Data/
+- https://github.com/AnthisKon/datasciencecoursera/
+
+- Thank you!
