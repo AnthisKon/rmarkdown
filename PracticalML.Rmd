@@ -1,0 +1,114 @@
+---
+title: "Practical Machine Learning"
+author: "Konstantinos"
+date: "5 January 2018"
+output: 
+  html_document:
+    toc: true
+    
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+# Data
+
+```{r message=FALSE, warning=FALSE}
+library(randomForest)
+library(caret)
+library(dplyr)
+library(rpart)
+```
+
+
+## Read Dataset
+
+- Read the dataset
+- Remove ID variable
+- Remove variables full of NAs
+```{r}
+train <- read.csv("pml-training.csv",header=T,sep=",",na.strings = c('NA',''))
+test <- read.csv("pml-testing.csv",header=T,sep=",",na.strings = c('NA',''))
+train <- train[,(colSums(is.na(train)) == 0)]
+test <- test[,(colSums(is.na(test)) == 0)]
+train <- select(train, -X )
+test <- select(test, -X )
+```
+
+- Validation data set. 75% of the train set will be used to train the model and the rest 25% to validate
+
+```{r}
+s <- createDataPartition(train$user_name, p = 0.75, list = FALSE)
+train_set <- train[s,]
+val_set <- train[-s,]
+```
+
+
+# Model 
+
+- Train Random Forest model with all variables and count how much time does it take to run
+```{r}
+time = Sys.time()
+rf_all <- randomForest(classe~.,train_set)
+time1 = Sys.time()
+rf_all_time <- time1-time
+rf_all
+```
+- Accuracy, Confusion Matrix and other Metrics
+```{r}
+confusionMatrix(val_set$classe,predict(rf_all, val_set[ ,-59] ))
+
+```
+
+## Variable Selection
+- See the Importance of the variables from the next plot
+```{r}
+varImpPlot(rf_all,cex=.8)
+```
+
+- I played around with the number of variables. I concluded to the obvious model. **WITH ONLY 4 VARIABLES**. After the 4 variables with most importance we can see from the plot that there is a big decrease. 
+```{r}
+col_index <- varImp(rf_all) %>%
+  mutate(names = row.names(.)) %>%
+  arrange(-Overall)
+imp_names <- col_index$names[1:4]
+
+time = Sys.time()
+rf_few <- randomForest(train_set[,imp_names],train_set[,59])
+time1 = Sys.time()
+rf_few_time <- time1-time
+```
+- Bellow are the results. The same great accuracy with only 4 variables. Why is this imprortant?? Faster model.
+```{r}
+
+confusionMatrix(val_set$classe,predict(rf_few, val_set[,imp_names]))
+```
+- The error is  *0.03%*
+
+- Faster model
+
+The model with all variables took `r rf_all_time ` minutes to run.
+The model withh 4 variables took  `r rf_few_time ` seconds to run.
+
+
+# Conclusions and prediction
+- First lets predict the test set 
+```{r}
+testing <- rbind(train[100, -59] , test[,-59]) 
+row.names(testing) <- c(100, 1:20)
+predict(rf_all,testing[-1,])
+```
+
+- I run from rpart a single tree just to visualise the model with 4 variables
+```{r}
+
+tree <- rpart(classe~., data = train_set[,c(imp_names,'classe')])
+plot(tree)
+text(tree, use.n=F, all=F, cex=.5)
+```
+
+
